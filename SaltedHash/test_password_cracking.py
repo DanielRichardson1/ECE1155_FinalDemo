@@ -1,390 +1,245 @@
-import os
-import subprocess
-import datetime
+#!/usr/bin/env python3
+import hashlib
 import time
+import string
+import os
+import itertools
 import matplotlib.pyplot as plt
 import numpy as np
-import pandas as pd
-import re
 
-# Configuration
-OUTPUT_DIR = "results"
-PLOTS_DIR = "plots"
+def read_password_file(file_path):
+    """Read password hashes from a file."""
+    try:
+        with open(file_path, 'r') as file:
+            return [line.strip() for line in file]
+    except FileNotFoundError:
+        print(f"Error: File {file_path} not found.")
+        return []
 
-# Hashcat hash modes
-UNSALTED_HASH_MODE = "0"  # MD5
-SALTED_HASH_MODE = "20"   # MD5($salt.$pass)
+def read_dictionary(file_path):
+    """Read dictionary words from a file."""
+    try:
+        with open(file_path, 'r') as file:
+            return [line.strip() for line in file]
+    except FileNotFoundError:
+        print(f"Error: Dictionary file {file_path} not found.")
+        return []
 
-# Create output directories
-os.makedirs(OUTPUT_DIR, exist_ok=True)
-os.makedirs(PLOTS_DIR, exist_ok=True)
+def get_hash(password, salt=""):
+    """Generate MD5 hash for a password with optional salt."""
+    salted_pass = password + salt
+    return hashlib.md5(salted_pass.encode()).hexdigest()
 
-# Get the timestamp from the file
-with open('password_sets/timestamp.txt', 'r') as f:
-    TIMESTAMP = f.read().strip()
-
-# Function to run Hashcat and collect data
-def run_cracking_test(password_file, use_salt=True, attack_mode="dictionary"):
-    base_filename = os.path.basename(password_file).replace('MD5_', '').replace('salted_', '').replace('.txt', '')
-    salt_suffix = "salted" if use_salt else "unsalted"
-    attack_suffix = attack_mode
-    
-    result_file = f"{OUTPUT_DIR}/{base_filename}_{salt_suffix}_{attack_suffix}_results.txt"
-    stats_file = f"{OUTPUT_DIR}/{base_filename}_{salt_suffix}_{attack_suffix}_stats.csv"
-    
-    print(f"Running {attack_mode} attack on {base_filename} ({salt_suffix})...")
-    
-    # Prepare the input file based on whether we're using salt or not
-    input_file = f"password_sets/MD5_salted_{base_filename}.txt" if use_salt else f"password_sets/MD5_{base_filename}.txt"
-    hash_mode = SALTED_HASH_MODE if use_salt else UNSALTED_HASH_MODE
-    
-    # Start time
+def dictionary_attack(hashes, dictionary, salt=""):
+    """Try to crack password hashes using a dictionary."""
     start_time = time.time()
+    cracked = {}
+    attempts = 0
     
-    # Data collection setup
-    times = []
-    cracked_counts = []
-    attempts = []
-    current_attempt = 0
-    
-    if attack_mode == "dictionary":
-        # Dictionary attack
-        cmd = [
-            "hashcat", 
-            "-m", hash_mode, 
-            "-a", "0",  # Dictionary attack
-            "--force",
-            "-o", result_file,
-            input_file,
-            "dictionary.txt"
-        ]
-        
-        # Add status monitor
-        cmd += ["--status", "--status-timer=1"]
-        
-        # Run the command
-        process = subprocess.Popen(
-            cmd, 
-            stdout=subprocess.PIPE, 
-            stderr=subprocess.STDOUT,
-            text=True,
-            bufsize=1,
-            universal_newlines=True
-        )
-        
-        # Parse output in real-time to collect stats
-        for line in iter(process.stdout.readline, ''):
-            print(line, end='')
-            
-            # Extract progress info from status lines
-            if "Speed" in line:
-                elapsed = time.time() - start_time
-                
-                # Try to extract progress
-                match = re.search(r'Recovered\.+: (\d+)/(\d+)', line)
-                if match:
-                    cracked = int(match.group(1))
-                    total = int(match.group(2))
-                    
-                    # Record data point
-                    times.append(elapsed)
-                    cracked_counts.append(cracked)
-                    
-                    # Estimate attempts from speed info
-                    speed_match = re.search(r'Speed\.#1\.+: (\d+[\.\d]*) (.H/s)', line)
-                    if speed_match:
-                        speed = float(speed_match.group(1))
-                        unit = speed_match.group(2)
-                        
-                        # Convert to H/s based on unit
-                        if 'kH/s' in unit:
-                            speed *= 1000
-                        elif 'MH/s' in unit:
-                            speed *= 1000000
-                        elif 'GH/s' in unit:
-                            speed *= 1000000000
-                        
-                        current_attempt += speed
-                        attempts.append(current_attempt)
-        
-        process.wait()
-        
-    else:  # Brute force attack
-        total_cracked = 0
-        total_passwords = sum(1 for _ in open(input_file))
-        
-        # Run brute force for lengths 4-6
-        for length in range(4, 7):
-            print(f"Trying length {length}...")
-            
-            # Set mask based on password type
-            if 'lower_alpha' in base_filename:
-                mask = ''.join(['?l'] * length)
-            elif 'full_alpha' in base_filename:
-                mask = ''.join(['?a'] * length)  # ?a includes uppercase and lowercase
-            elif 'alphanumeric' in base_filename:
-                mask = ''.join(['?a'] * length)  # ?a includes alphanumeric
-            else:  # all_chars
-                mask = ''.join(['?a'] * length)  # ?a includes all ASCII
-            
-            # Run hashcat with brute force
-            cmd = [
-                "hashcat", 
-                "-m", hash_mode, 
-                "-a", "3",  # Brute force attack
-                "--force",
-                "-o", result_file,
-                input_file,
-                mask
-            ]
-            
-            # Add status monitor
-            cmd += ["--status", "--status-timer=1"]
-            
-            # Run the command
-            process = subprocess.Popen(
-                cmd, 
-                stdout=subprocess.PIPE, 
-                stderr=subprocess.STDOUT,
-                text=True,
-                bufsize=1,
-                universal_newlines=True
-            )
-            
-            # Parse output in real-time to collect stats
-            for line in iter(process.stdout.readline, ''):
-                print(line, end='')
-                
-                # Extract progress info from status lines
-                if "Speed" in line:
-                    elapsed = time.time() - start_time
-                    
-                    # Try to extract progress
-                    match = re.search(r'Recovered\.+: (\d+)/(\d+)', line)
-                    if match:
-                        cracked = int(match.group(1))
-                        total = int(match.group(2))
-                        
-                        # Record data point
-                        times.append(elapsed)
-                        cracked_counts.append(total_cracked + cracked)
-                        
-                        # Estimate attempts from speed info
-                        speed_match = re.search(r'Speed\.#1\.+: (\d+[\.\d]*) (.H/s)', line)
-                        if speed_match:
-                            speed = float(speed_match.group(1))
-                            unit = speed_match.group(2)
-                            
-                            # Convert to H/s based on unit
-                            if 'kH/s' in unit:
-                                speed *= 1000
-                            elif 'MH/s' in unit:
-                                speed *= 1000000
-                            elif 'GH/s' in unit:
-                                speed *= 1000000000
-                            
-                            current_attempt += speed
-                            attempts.append(current_attempt)
-            
-            process.wait()
-            
-            # Count cracked passwords after this length iteration
-            if os.path.exists(result_file):
-                cracked_this_round = sum(1 for _ in open(result_file)) - total_cracked
-                total_cracked += cracked_this_round
-            
-            # If all passwords are cracked, stop
-            if total_cracked >= total_passwords:
+    for word in dictionary:
+        attempts += 1
+        hash_value = get_hash(word, salt)
+        if hash_value in hashes:
+            cracked[hash_value] = word
+            if len(cracked) == len(hashes):
                 break
     
-    # End time
-    end_time = time.time()
-    elapsed = end_time - start_time
-    
-    # Count final cracked passwords
-    cracked = 0
-    if os.path.exists(result_file):
-        cracked = sum(1 for _ in open(result_file))
-    
-    total = sum(1 for _ in open(input_file))
-    
-    print(f"Test completed in {elapsed:.2f} seconds")
-    print(f"Cracked {cracked} out of {total} passwords")
-    
-    # Save raw data for plotting
-    df = pd.DataFrame({
-        'Time': times,
-        'Cracked': cracked_counts,
-        'Attempts': attempts
-    })
-    df.to_csv(stats_file, index=False)
+    elapsed_time = time.time() - start_time
     
     return {
-        'file': base_filename,
-        'salt': use_salt,
-        'attack': attack_mode,
-        'time': elapsed,
         'cracked': cracked,
-        'total': total,
-        'success_rate': cracked / total if total > 0 else 0,
-        'stats_file': stats_file
+        'time': elapsed_time,
+        'attempts': attempts
     }
 
-# Function to create plots
-def create_plots(results):
-    # Group results by password file and attack type
-    grouped_results = {}
-    for result in results:
-        key = (result['file'], result['attack'])
-        if key not in grouped_results:
-            grouped_results[key] = []
-        grouped_results[key].append(result)
+def brute_force_attack(hashes, charset, max_length=4, salt=""):
+    """Try to crack password hashes using brute force."""
+    start_time = time.time()
+    cracked = {}
+    attempts = 0
     
-    # Create plots for each password set and attack type
-    for (file, attack), result_group in grouped_results.items():
-        # Sort results by salted/unsalted
-        result_group.sort(key=lambda x: x['salt'])
-        
-        # Time comparison plot
-        plt.figure(figsize=(10, 6))
-        plt.bar(
-            ['Unsalted', 'Salted'], 
-            [r['time'] for r in result_group],
-            color=['skyblue', 'navy']
-        )
-        plt.title(f'Time to Crack: {file} ({attack} attack)')
-        plt.ylabel('Time (seconds)')
-        plt.grid(axis='y', linestyle='--', alpha=0.7)
-        plt.savefig(f'{PLOTS_DIR}/{file}_{attack}_time_comparison.png')
-        plt.close()
-        
-        # Success rate comparison plot
-        plt.figure(figsize=(10, 6))
-        plt.bar(
-            ['Unsalted', 'Salted'], 
-            [r['success_rate'] * 100 for r in result_group],
-            color=['lightgreen', 'darkgreen']
-        )
-        plt.title(f'Success Rate: {file} ({attack} attack)')
-        plt.ylabel('Success Rate (%)')
-        plt.ylim(0, 100)
-        plt.grid(axis='y', linestyle='--', alpha=0.7)
-        plt.savefig(f'{PLOTS_DIR}/{file}_{attack}_success_comparison.png')
-        plt.close()
-        
-        # Time vs. Cracked progress plot (if we have detailed stats files)
-        for result in result_group:
-            if os.path.exists(result['stats_file']):
-                try:
-                    df = pd.read_csv(result['stats_file'])
-                    if len(df) > 1:  # Only if we have enough data points
-                        plt.figure(figsize=(10, 6))
-                        plt.plot(df['Time'], df['Cracked'], label=f"{'Salted' if result['salt'] else 'Unsalted'}")
-                        plt.title(f'Cracking Progress: {file} ({attack} attack)')
-                        plt.xlabel('Time (seconds)')
-                        plt.ylabel('Passwords Cracked')
-                        plt.grid(True, linestyle='--', alpha=0.7)
-                        plt.legend()
-                        plt.savefig(f'{PLOTS_DIR}/{file}_{attack}_{"salted" if result["salt"] else "unsalted"}_progress.png')
-                        plt.close()
-                        
-                        # Attempts vs. Cracked plot
-                        plt.figure(figsize=(10, 6))
-                        plt.plot(df['Attempts'], df['Cracked'], label=f"{'Salted' if result['salt'] else 'Unsalted'}")
-                        plt.title(f'Attempts vs. Success: {file} ({attack} attack)')
-                        plt.xlabel('Estimated Attempts')
-                        plt.ylabel('Passwords Cracked')
-                        plt.grid(True, linestyle='--', alpha=0.7)
-                        plt.legend()
-                        plt.savefig(f'{PLOTS_DIR}/{file}_{attack}_{"salted" if result["salt"] else "unsalted"}_attempts.png')
-                        plt.close()
-                except Exception as e:
-                    print(f"Error creating progress plots for {result['stats_file']}: {e}")
+    for length in range(1, max_length + 1):
+        for combo in itertools.product(charset, repeat=length):
+            attempts += 1
+            password = ''.join(combo)
+            hash_value = get_hash(password, salt)
+            
+            if hash_value in hashes:
+                cracked[hash_value] = password
+                if len(cracked) == len(hashes):
+                    elapsed_time = time.time() - start_time
+                    return {
+                        'cracked': cracked,
+                        'time': elapsed_time,
+                        'attempts': attempts
+                    }
     
-    # Create combined plot for all password sets (dictionary attack)
-    plt.figure(figsize=(12, 8))
-    files = sorted(set(r['file'] for r in results if r['attack'] == 'dictionary'))
-    x = np.arange(len(files))
-    width = 0.35
+    elapsed_time = time.time() - start_time
+    return {
+        'cracked': cracked,
+        'time': elapsed_time,
+        'attempts': attempts
+    }
+
+def create_comparison_plot(unsalted_data, salted_data, metric, charset_name, output_dir="plots"):
+    """Create comparison bar plots between salted and unsalted results."""
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
     
-    unsalted_times = [next(r['time'] for r in results if r['file'] == f and r['attack'] == 'dictionary' and not r['salt']) for f in files]
-    salted_times = [next(r['time'] for r in results if r['file'] == f and r['attack'] == 'dictionary' and r['salt']) for f in files]
+    labels = ['Unsalted', 'Salted']
+    values = [unsalted_data, salted_data]
     
-    plt.bar(x - width/2, unsalted_times, width, label='Unsalted', color='skyblue')
-    plt.bar(x + width/2, salted_times, width, label='Salted', color='navy')
+    plt.figure(figsize=(10, 6))
+    bar_colors = ['#3498db', '#e74c3c']  # Blue for unsalted, Red for salted
+    bars = plt.bar(labels, values, color=bar_colors)
     
-    plt.xlabel('Password Set')
-    plt.ylabel('Time (seconds)')
-    plt.title('Dictionary Attack: Time Comparison Across Password Sets')
-    plt.xticks(x, [f.replace('_', ' ').title() for f in files])
-    plt.legend()
+    # Add a grid for better readability
     plt.grid(axis='y', linestyle='--', alpha=0.7)
+    
+    # Format y-axis for large numbers
+    if metric == "Number of Attempts" and max(values) > 1000:
+        plt.ticklabel_format(style='plain', axis='y')
+    
+    plt.ylabel(metric, fontsize=12, fontweight='bold')
+    plt.xlabel('Password Type', fontsize=12, fontweight='bold')
+    
+    title = f'Comparison of {metric} for {charset_name}'
+    plt.title(title, fontsize=14, fontweight='bold')
+    
+    # Add values on top of bars
+    for i, bar in enumerate(bars):
+        height = bar.get_height()
+        if metric == "Time (seconds)":
+            display_value = f"{height:.4f}s"
+        else:
+            display_value = f"{int(height):,}"
+        plt.text(bar.get_x() + bar.get_width()/2., height + (max(values) * 0.01),
+                 display_value, ha='center', va='bottom', fontweight='bold')
+    
+    # Save the plot
+    filename = f"{charset_name.lower().replace(' ', '_')}_{metric.split()[0].lower()}.png"
     plt.tight_layout()
-    plt.savefig(f'{PLOTS_DIR}/combined_dictionary_time_comparison.png')
+    plt.savefig(os.path.join(output_dir, filename), dpi=300)
     plt.close()
     
-    # Create combined plot for all password sets (brute force attack)
-    plt.figure(figsize=(12, 8))
-    files = sorted(set(r['file'] for r in results if r['attack'] == 'bruteforce'))
-    x = np.arange(len(files))
-    
-    unsalted_times = [next(r['time'] for r in results if r['file'] == f and r['attack'] == 'bruteforce' and not r['salt']) for f in files]
-    salted_times = [next(r['time'] for r in results if r['file'] == f and r['attack'] == 'bruteforce' and r['salt']) for f in files]
-    
-    plt.bar(x - width/2, unsalted_times, width, label='Unsalted', color='salmon')
-    plt.bar(x + width/2, salted_times, width, label='Salted', color='darkred')
-    
-    plt.xlabel('Password Set')
-    plt.ylabel('Time (seconds)')
-    plt.title('Brute Force Attack: Time Comparison Across Password Sets')
-    plt.xticks(x, [f.replace('_', ' ').title() for f in files])
-    plt.legend()
-    plt.grid(axis='y', linestyle='--', alpha=0.7)
-    plt.tight_layout()
-    plt.savefig(f'{PLOTS_DIR}/combined_bruteforce_time_comparison.png')
-    plt.close()
+    return os.path.join(output_dir, filename)
+
+def get_charset_and_name(charset_type):
+    """Get the character set and display name based on type."""
+    if charset_type == "full_alpha":
+        return string.ascii_lowercase + string.ascii_uppercase, "Full Alphabetic"
+    elif charset_type == "lower_alpha":
+        return string.ascii_lowercase, "Lowercase Alphabetic"
+    elif charset_type == "alphanumeric":
+        return string.ascii_lowercase + string.ascii_uppercase + string.digits, "Alphanumeric"
+    elif charset_type == "all_chars":
+        return string.ascii_lowercase + string.ascii_uppercase + string.digits + string.punctuation, "Full Character Set"
+    else:
+        return string.ascii_lowercase, "Unknown"
 
 def main():
-    # Make sure we have password files
-    if not os.path.exists('password_sets/timestamp.txt'):
-        print("Error: Password files not found. Run the password generation script first.")
-        return
+    # Create plots directory if it doesn't exist
+    plots_dir = "plots"
+    if not os.path.exists(plots_dir):
+        os.makedirs(plots_dir)
     
-    # Test both dictionary and brute force attacks on all password sets
-    results = []
+    # Define charset types for testing
+    charset_types = ["full_alpha", "lower_alpha", "alphanumeric", "all_chars"]
     
-    password_files = [
-        'password_sets/lower_alpha.txt',
-        'password_sets/full_alpha.txt',
-        'password_sets/alphanumeric.txt',
-        'password_sets/all_chars.txt'
-    ]
-    
-    for attack_mode in ['dictionary', 'bruteforce']:
-        for password_file in password_files:
-            # Test unsalted hashed passwords first
-            result = run_cracking_test(password_file, use_salt=False, attack_mode=attack_mode)
-            results.append(result)
-            
-            # Then test salted hashed passwords
-            result = run_cracking_test(password_file, use_salt=True, attack_mode=attack_mode)
-            results.append(result)
-    
-    # Write summary results
-    with open(f'{OUTPUT_DIR}/summary.txt', 'w') as f:
-        f.write("Summary of Password Cracking Tests\n")
-        f.write("================================\n\n")
+    # Run tests and generate plots for each charset type
+    for charset_type in charset_types:
+        print(f"\nProcessing {charset_type}...")
         
-        for result in results:
-            f.write(f"{result['file']} - {result['attack']} attack - {'Salted' if result['salt'] else 'Unsalted'}:\n")
-            f.write(f"  Time: {result['time']:.2f} seconds\n")
-            f.write(f"  Cracked: {result['cracked']}/{result['total']} ({result['success_rate']*100:.2f}%)\n\n")
+        # Get charset and display name
+        charset, charset_name = get_charset_and_name(charset_type)
+        
+        # Prepare file paths
+        unsalted_hash_file = f"./password_sets/MD5_{charset_type}.txt"
+        salted_hash_file = f"./password_sets/MD5_salted_{charset_type}.txt"
+        dict_file = f"./password_sets/{charset_type}.txt"
+        
+        # Read hash files
+        unsalted_hashes = read_password_file(unsalted_hash_file)
+        salted_hashes = read_password_file(salted_hash_file)
+        
+        if not unsalted_hashes or not salted_hashes:
+            print(f"Skipping {charset_type} due to missing hash files.")
+            continue
+        
+        print(f"Found {len(unsalted_hashes)} unsalted hashes and {len(salted_hashes)} salted hashes.")
+        
+        # Try to get salt from file
+        salt = ""
+        try:
+            salt_file = f"./password_sets/{dict_file}.salted"
+            with open(salt_file, 'r') as file:
+                salt_content = file.readline().strip()
+                # Try to extract salt by comparing with original file
+                try:
+                    with open(dict_file, 'r') as orig_file:
+                        orig_content = orig_file.readline().strip()
+                        if salt_content.startswith(orig_content):
+                            salt = salt_content[len(orig_content):]
+                        else:
+                            # Default to some common salt if we can't detect it
+                            salt = "salt"
+                except:
+                    salt = "salt"  # Default salt if original file can't be read
+        except FileNotFoundError:
+            print(f"No salt file found for {charset_type}. Using default salt.")
+            salt = "salt"  # Default salt
+        
+        print(f"Using salt: '{salt}' for salted passwords")
+        
+        # Read dictionary for dictionary attack
+        dictionary = read_dictionary(dict_file)
+        if not dictionary:
+            print(f"Creating simple dictionary for {charset_type}...")
+            # Create a simple dictionary if file not found
+            dictionary = [''.join(p) for p in itertools.product(charset[:min(len(charset), 3)], repeat=3)]
+        
+        # Dictionary attack
+        print(f"Running dictionary attack on unsalted {charset_type}...")
+        unsalted_dict = dictionary_attack(unsalted_hashes, dictionary)
+        
+        print(f"Running dictionary attack on salted {charset_type}...")
+        salted_dict = dictionary_attack(salted_hashes, dictionary, salt=salt)
+        
+        # Brute force attack
+        print(f"Running brute force attack on unsalted {charset_type}...")
+        unsalted_bf = brute_force_attack(unsalted_hashes, charset, max_length=3)
+        
+        print(f"Running brute force attack on salted {charset_type}...")
+        salted_bf = brute_force_attack(salted_hashes, charset, max_length=3, salt=salt)
+        
+        # Print results
+        print(f"\nResults for {charset_name}:")
+        print(f"Unsalted brute force: {len(unsalted_bf['cracked'])}/{len(unsalted_hashes)} cracked in {unsalted_bf['time']:.4f}s with {unsalted_bf['attempts']} attempts")
+        print(f"Salted brute force: {len(salted_bf['cracked'])}/{len(salted_hashes)} cracked in {salted_bf['time']:.4f}s with {salted_bf['attempts']} attempts")
+        print(f"Unsalted dictionary: {len(unsalted_dict['cracked'])}/{len(unsalted_hashes)} cracked in {unsalted_dict['time']:.4f}s with {unsalted_dict['attempts']} attempts")
+        print(f"Salted dictionary: {len(salted_dict['cracked'])}/{len(salted_hashes)} cracked in {salted_dict['time']:.4f}s with {salted_dict['attempts']} attempts")
+        
+        # Create time comparison plot
+        time_plot = create_comparison_plot(
+            unsalted_bf['time'], 
+            salted_bf['time'], 
+            "Time (seconds)", 
+            charset_name,
+            plots_dir
+        )
+        print(f"Created time comparison plot: {time_plot}")
+        
+        # Create attempts comparison plot
+        attempts_plot = create_comparison_plot(
+            unsalted_bf['attempts'], 
+            salted_bf['attempts'], 
+            "Number of Attempts", 
+            charset_name,
+            plots_dir
+        )
+        print(f"Created attempts comparison plot: {attempts_plot}")
     
-    # Create plots
-    create_plots(results)
-    
-    print("\nAll tests completed. Results are available in the 'results' directory.")
-    print("Plots are available in the 'plots' directory.")
+    print("\nAll processing complete. Plots saved in the 'plots' directory.")
 
 if __name__ == "__main__":
     main()

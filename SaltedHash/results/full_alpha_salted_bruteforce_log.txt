@@ -1,0 +1,71 @@
+hashcat (v6.2.6) starting
+
+You have enabled --force to bypass dangerous warnings and errors!
+This can hide serious problems and should only be done when debugging.
+Do not report hashcat issues encountered when using --force.
+
+METAL API (Metal 343.14)
+========================
+* Device #1: AMD Radeon Pro 5500M, skipped
+* Device #2: Intel(R) UHD Graphics 630, skipped
+
+OpenCL API (OpenCL 1.2 (Feb 10 2024 00:43:05)) - Platform #1 [Apple]
+====================================================================
+* Device #3: Intel(R) Core(TM) i9-9880H CPU @ 2.30GHz, 16352/32768 MB (4096 MB allocatable), 16MCU
+* Device #4: Intel(R) UHD Graphics 630, skipped
+* Device #5: AMD Radeon Pro 5500M Compute Engine, skipped
+
+Minimum password length supported by kernel: 0
+Maximum password length supported by kernel: 256
+Minimim salt length supported by kernel: 0
+Maximum salt length supported by kernel: 256
+
+Counting lines in password_sets/MD5_salted_full_alpha.txt. Please be patient...Counted lines in password_sets/MD5_salted_full_alpha.txtParsing Hashes: 1/6 (16.67%)...Parsed Hashes: 6/6 (100.00%)Sorting hashes. Please be patient...Sorted hashesRemoving duplicate hashes. Please be patient...Removed duplicate hashesSorting salts. Please be patient...Sorted saltsComparing hashes with potfile entries. Please be patient...Compared hashes with potfile entriesGenerating bitmap tables...Generated bitmap tablesHashes: 6 digests; 6 unique digests, 1 unique salts
+Bitmaps: 16 bits, 65536 entries, 0x0000ffff mask, 262144 bytes, 5/13 rotates
+
+Optimizers applied:
+* Zero-Byte
+* Early-Skip
+* Not-Iterated
+* Single-Salt
+* Brute-Force
+* Raw-Hash
+
+ATTENTION! Pure (unoptimized) backend kernels selected.
+Pure kernels can crack longer passwords, but drastically reduce performance.
+If you want to switch to optimized kernels, append -O to your commandline.
+See the above message to find out about the exact limits.
+
+Watchdog: Temperature abort trigger set to 100c
+
+Initializing device kernels and memory. Please be patient...Initializing backend runtime for device #3. Please be patient...Initialized backend runtime for device #3Host memory required for this attack: 4 MB
+
+Initialized device kernels and memoryStarting self-test. Please be patient...Finished self-testStarting autotune. Please be patient...Finished autotune
+                                                          
+[s]tatus [p]ause [b]ypass [c]heckpoint [f]inish [q]uit => 
+                                                          
+Approaching final keyspace - workload adjusted.
+
+[s]tatus [p]ause [b]ypass [c]heckpoint [f]inish [q]uit => 
+                                                          
+Session..........: hashcat
+Status...........: Exhausted
+Hash.Mode........: 20 (md5($salt.$pass))
+Hash.Target......: password_sets/MD5_salted_full_alpha.txt
+Time.Started.....: Thu Apr 24 16:38:24 2025, (0 secs)
+Time.Estimated...: Thu Apr 24 16:38:24 2025, (0 secs)
+Kernel.Feature...: Pure Kernel
+Guess.Mask.......: ?a?a?a?a [4]
+Guess.Queue......: 1/1 (100.00%)
+Speed.#3.........:   227.3 MH/s (6.51ms) @ Accel:1024 Loops:95 Thr:1 Vec:4
+Recovered........: 0/6 (0.00%) Digests (total), 0/6 (0.00%) Digests (new)
+Progress.........: 81450625/81450625 (100.00%)
+Rejected.........: 0/81450625 (0.00%)
+Restore.Point....: 857375/857375 (100.00%)
+Restore.Sub.#3...: Salt:0 Amplifier:0-95 Iteration:0-95
+Candidate.Engine.: Device Generator
+Candidates.#3....: s2z~ ->   ~}
+Hardware.Mon.SMC.: Fan0: 78%, Fan1: 78%
+Hardware.Mon.#3..: Temp: 68c
+Started: Thu Apr 24 16:38:18 2025
+Stopped: Thu Apr 24 16:38:25 2025

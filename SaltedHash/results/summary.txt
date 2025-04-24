@@ -1,0 +1,67 @@
+Summary of Password Cracking Tests
+================================
+
+lower_alpha - dictionary attack - Unsalted:
+  Time: 3.09 seconds
+  Cracked: 4/6 (66.67%)
+
+lower_alpha - dictionary attack - Salted:
+  Time: 3.30 seconds
+  Cracked: 4/6 (66.67%)
+
+full_alpha - dictionary attack - Unsalted:
+  Time: 3.08 seconds
+  Cracked: 0/6 (0.00%)
+
+full_alpha - dictionary attack - Salted:
+  Time: 5.15 seconds
+  Cracked: 0/6 (0.00%)
+
+alphanumeric - dictionary attack - Unsalted:
+  Time: 5.98 seconds
+  Cracked: 1/6 (16.67%)
+
+alphanumeric - dictionary attack - Salted:
+  Time: 4.94 seconds
+  Cracked: 1/6 (16.67%)
+
+all_chars - dictionary attack - Unsalted:
+  Time: 5.35 seconds
+  Cracked: 0/6 (0.00%)
+
+all_chars - dictionary attack - Salted:
+  Time: 4.94 seconds
+  Cracked: 0/6 (0.00%)
+
+lower_alpha - bruteforce attack - Unsalted:
+  Time: 5.66 seconds
+  Cracked: 0/6 (0.00%)
+
+lower_alpha - bruteforce attack - Salted:
+  Time: 6.67 seconds
+  Cracked: 0/6 (0.00%)
+
+full_alpha - bruteforce attack - Unsalted:
+  Time: 6.16 seconds
+  Cracked: 0/6 (0.00%)
+
+full_alpha - bruteforce attack - Salted:
+  Time: 6.85 seconds
+  Cracked: 0/6 (0.00%)
+
+alphanumeric - bruteforce attack - Unsalted:
+  Time: 6.92 seconds
+  Cracked: 0/6 (0.00%)
+
+alphanumeric - bruteforce attack - Salted:
+  Time: 7.12 seconds
+  Cracked: 0/6 (0.00%)
+
+all_chars - bruteforce attack - Unsalted:
+  Time: 6.22 seconds
+  Cracked: 0/6 (0.00%)
+
+all_chars - bruteforce attack - Salted:
+  Time: 7.82 seconds
+  Cracked: 0/6 (0.00%)
+

@@ -26,7 +26,7 @@ def hash_string(input_string, algorithm="sha256"):
     
     elif algorithm.lower() == "bcrypt":
         # bcrypt requires a salt and works with bytes
-        salt = bcrypt.gensalt()
+        salt = bcrypt.gensalt(rounds=4)
         result = bcrypt.hashpw(input_string.encode(), salt).decode('utf-8')
     
     elif algorithm.lower() == "argon2":

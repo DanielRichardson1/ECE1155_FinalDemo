@@ -30,8 +30,12 @@ def hash_string(input_string, algorithm="sha256"):
         result = bcrypt.hashpw(input_string.encode(), salt).decode('utf-8')
     
     elif algorithm.lower() == "argon2":
-        # Using argon2 with default parameters
-        ph = argon2.PasswordHasher()
+        # Using argon2 with minimal parameters for simulation speed
+        ph = argon2.PasswordHasher(
+            time_cost=1,      # Default is 2
+            memory_cost=8,    # Default is much higher (65536 KiB)
+            parallelism=1     # Default is 4
+        )
         result = ph.hash(input_string)
     
     else:

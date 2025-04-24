@@ -100,7 +100,11 @@ def crack_password_bf(hashed_password, algorithm="sha256", known_charset="numeri
                 return False
         
         elif algorithm.lower() == "argon2":
-            ph = argon2.PasswordHasher()
+            ph = argon2.PasswordHasher(
+                time_cost=1,     # Reduced from default 2
+                memory_cost=8,   # Reduced from default 65536
+                parallelism=1    # Reduced from default 4
+            )
             try:
                 ph.verify(hashed_password, password_attempt)
                 return True

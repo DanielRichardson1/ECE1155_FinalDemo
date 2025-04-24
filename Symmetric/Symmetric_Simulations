@@ -1,0 +1,325 @@
+import sys
+import time
+import base64
+import itertools
+import matplotlib.pyplot as plt
+from Crypto.Cipher import AES, DES
+from Crypto.Util.Padding import pad, unpad
+from hashlib import sha256
+import random
+
+short_passwords = [
+    "1234", "pass", "love", "lion", "star", "time", "cool", "fire", "wolf", "bear",
+    "moon", "dark", "king", "ball", "play", "note", "code", "hope", "blue", "gray",
+    "fish", "race", "bike", "jazz", "echo", "surf", "hero", "leaf", "jump", "buzz"
+]
+
+long_passwords = ["hunter", "bagels", "dragon", "soccer", "corner", "budget", "monkey", "casual", "author", "damage"]
+
+
+### AES Functions ###
+def derive_key_aes(pw, key_length=16):
+    return sha256(pw.encode()).digest()[:key_length]  
+
+def encrypt_aes(data, password, key_length=16):
+    key = derive_key_aes(password, key_length)
+    cipher = AES.new(key, AES.MODE_ECB)
+    return base64.b64encode(cipher.encrypt(pad(data, AES.block_size)))
+
+def decrypt_aes(data_b64, password_guess, key_length=16):
+    try:
+        key = derive_key_aes(password_guess, key_length)
+        cipher = AES.new(key, AES.MODE_ECB)
+        pt = unpad(cipher.decrypt(base64.b64decode(data_b64)), AES.block_size)
+        return pt
+    except:
+        return None
+
+### DES Functions ###
+def derive_key_des(pw):
+    return sha256(pw.encode()).digest()[:8]
+
+def encrypt_des(data, password):
+    key = derive_key_des(password)
+    cipher = DES.new(key, DES.MODE_ECB)
+    return base64.b64encode(cipher.encrypt(pad(data, DES.block_size)))
+
+def decrypt_des(data_b64, password_guess):
+    try:
+        key = derive_key_des(password_guess)
+        cipher = DES.new(key, DES.MODE_ECB)
+        pt = unpad(cipher.decrypt(base64.b64decode(data_b64)), DES.block_size)
+        return pt
+    except:
+        return None
+
+### Attack Functions ###
+def dictionary_attack(ciphertext, target_plaintext, candidates, decrypt_func):
+    start = time.time()
+    guesses = 0
+    for guess in candidates:
+        guesses += 1
+        if guesses % 100000 == 0:  # Debugging so I know it is still running
+            print(f"Checked {guesses} passwords...")
+        decrypted = decrypt_func(ciphertext, guess)
+        if decrypted == target_plaintext:
+            end = time.time()
+            return guess, guesses, end - start
+    return None, guesses, time.time() - start
+
+def brute_force_attack(ciphertext, target_plaintext, charset, length, decrypt_func):
+    start = time.time()
+    guesses = 0
+    for candidate in itertools.product(charset, repeat=length):
+        guess = ''.join(candidate)
+        guesses += 1
+        decrypted = decrypt_func(ciphertext, guess)
+        if decrypted == target_plaintext:
+            end = time.time()
+            return guess, guesses, end - start
+    return None, guesses, time.time() - start
+
+### Load Dictionary ###
+try:
+    with open("rockyou.txt", "r", encoding="utf-8", errors="ignore") as f:
+        rockyou_list = [line.strip() for line in f if line.strip()]
+except Exception as e:
+    print("Error loading rockyou.txt:", e)
+
+### Attacking functions ###
+# Brute-force Attack 
+def brute_force_attack(ciphertext, target_plaintext, charset, length, decrypt_func, key_length):
+    start = time.time()
+    guesses = 0
+    for candidate in itertools.product(charset, repeat=length):
+        guess = ''.join(candidate)
+        guesses += 1
+        decrypted = decrypt_func(ciphertext, guess, key_length)
+        if decrypted == target_plaintext:
+            end = time.time()
+            return guess, guesses, end - start
+    return None, guesses, time.time() - start
+
+# --- Run Experiment Across Key Lengths ---
+def run_key_length_experiment():
+    password = "abc123"  
+    plaintext = b"Julia is cool"
+    charset = "abc123"  # small character set for brute-force
+    key_lengths = [16, 24, 32]  # AES-128, AES-192, AES-256
+
+    results = []
+    for key_len in key_lengths:
+        print(f"\nRunning brute-force attack with AES-{key_len * 8}")
+        ciphertext = encrypt_aes(plaintext, password, key_len)
+        found, guesses, time_taken = brute_force_attack(ciphertext, plaintext, charset, len(password), decrypt_aes, key_len)
+        results.append((f"AES-{key_len*8}", time_taken, guesses))
+
+    return results
+
+# --- Plot Results for AES keys -- Part 2 of simulations ---
+def plot_results(results):
+    labels = [r[0] for r in results]
+    times = [r[1] for r in results]
+    guesses = [r[2] for r in results]
+
+    plt.figure(figsize=(10, 5))
+    
+    # Time to crack
+    plt.subplot(1, 2, 1)
+    plt.bar(labels, times, color="skyblue")
+    plt.ylabel("Time (seconds)")
+    plt.title("Time to Crack vs AES Key Length")
+
+    # Number of guesses
+    plt.subplot(1, 2, 2)
+    plt.bar(labels, guesses, color="salmon")
+    plt.ylabel("Number of Guesses")
+    plt.title("Guess Count vs AES Key Length")
+
+    plt.tight_layout()
+    plt.show()
+
+############################################################################
+###### Part 1 ####################
+### Setup ###
+dict_password = random.choice(rockyou_list)
+plaintext_dict = b"Secret Message for Dictionary Attack!"
+plaintext_bf = b"Secret Message for Brute-Force Attack!"
+bf_password = "ab12"
+bf_charset = "ab12"
+bf_length = len(bf_password)
+
+### AES Attacks ###
+print("Starting AES Attacks\n")
+ciphertext_dict_aes = encrypt_aes(plaintext_dict, dict_password)
+aes_found, aes_guesses, aes_time = dictionary_attack(ciphertext_dict_aes, plaintext_dict, rockyou_list, decrypt)
+
+ciphertext_bf_aes = encrypt_aes(plaintext_bf, bf_password)
+aes_bf_found, aes_bf_guesses, aes_bf_time = brute_force_attack(ciphertext_bf_aes, plaintext_bf, bf_charset, bf_length, decrypt)
+
+print("Starting DES attacks.\n")
+### DES Attacks ###
+ciphertext_dict_des = encrypt_des(plaintext_dict, dict_password)
+des_found, des_guesses, des_time = dictionary_attack(ciphertext_dict_des, plaintext_dict, rockyou_list, decrypt_des)
+
+ciphertext_bf_des = encrypt_des(plaintext_bf, bf_password)
+des_bf_found, des_bf_guesses, des_bf_time = brute_force_attack(ciphertext_bf_des, plaintext_bf, bf_charset, bf_length, decrypt_des)
+
+### Individual AES Chart ###
+plt.figure(figsize=(10, 5))
+plt.subplot(1, 2, 1)
+plt.bar(["AES Dictionary", "AES Brute-Force"], [aes_time, aes_bf_time], color=["skyblue", "salmon"])
+plt.ylabel("Time (seconds)")
+plt.title("AES Attack Time Comparison")
+plt.subplot(1, 2, 2)
+plt.bar(["AES Dictionary", "AES Brute-Force"], [aes_guesses, aes_bf_guesses], color=["skyblue", "salmon"])
+plt.ylabel("Number of Guesses")
+plt.title("AES Guess Count Comparison")
+plt.tight_layout()
+plt.show()
+
+### Individual DES Chart ###
+plt.figure(figsize=(10, 5))
+plt.subplot(1, 2, 1)
+plt.bar(["DES Dictionary", "DES Brute-Force"], [des_time, des_bf_time], color=["lightgreen", "orange"])
+plt.ylabel("Time (seconds)")
+plt.title("DES Attack Time Comparison")
+plt.subplot(1, 2, 2)
+plt.bar(["DES Dictionary", "DES Brute-Force"], [des_guesses, des_bf_guesses], color=["lightgreen", "orange"])
+plt.ylabel("Number of Guesses")
+plt.title("DES Guess Count Comparison")
+plt.tight_layout()
+plt.show()
+
+### Combined AES vs DES Comparison Chart ###
+plt.figure(figsize=(10, 5))
+plt.subplot(1, 2, 1)
+plt.bar(["AES Dictionary", "AES Brute-Force", "DES Dictionary", "DES Brute-Force"],
+        [aes_time, aes_bf_time, des_time, des_bf_time],
+        color=["skyblue", "salmon", "lightgreen", "orange"])
+plt.ylabel("Time (seconds)")
+plt.title("AES vs DES - Time Comparison")
+
+plt.subplot(1, 2, 2)
+plt.bar(["AES Dictionary", "AES Brute-Force", "DES Dictionary", "DES Brute-Force"],
+        [aes_guesses, aes_bf_guesses, des_guesses, des_bf_guesses],
+        color=["skyblue", "salmon", "lightgreen", "orange"])
+plt.ylabel("Number of Guesses")
+plt.title("AES vs DES - Guess Count Comparison")
+
+plt.tight_layout()
+plt.show()
+
+
+############################################################################
+###### Part 2 and Chart 2 ####################
+results = run_key_length_experiment()
+plot_results(results)
+
+###### Part 3 and Chart 3 ####################
+selected_password = random.choice(short_passwords)
+print(f"Selected short password: {selected_password}")
+
+plaintext = b"Controlled dictionary test"
+charset = "abcdefghijklmnopqrstuvwxyz0123456789"
+key_length = 16  # AES-128
+
+ciphertext = encrypt_aes(plaintext, selected_password, key_length)
+
+dict_found, dict_guesses, dict_time = dictionary_attack(ciphertext, plaintext, short_passwords, decrypt, key_length)
+brute_found, brute_guesses, brute_time = brute_force_attack(ciphertext, plaintext, charset, len(selected_password), decrypt, key_length)
+
+#  Plot Results 
+attack_labels = ["Dictionary Attack", "Brute-Force Attack"]
+times = [dict_time, brute_time]
+guesses = [dict_guesses, brute_guesses]
+
+plt.figure(figsize=(10, 5))
+plt.subplot(1, 2, 1)
+plt.bar(attack_labels, times, color=["skyblue", "salmon"])
+plt.ylabel("Time (seconds)")
+plt.title("Time to Crack - Short Passwords")
+
+plt.subplot(1, 2, 2)
+plt.bar(attack_labels, guesses, color=["skyblue", "salmon"])
+plt.ylabel("Number of Guesses")
+plt.title("Guess Count - Short Passwords")
+
+plt.tight_layout()
+plt.show()
+
+
+############################################################################
+###### Part 4 and Chart 4 ####################
+
+# Select passwords
+selected_short = random.choice(short_passwords)
+selected_long = random.choice(long_passwords)
+plaintext = b"Controlled dictionary test"
+charset = "abcdefghijklmnopqrstuvwxyz"
+
+# Encrypt both
+cipher_short = encrypt_aes(plaintext, selected_short)
+cipher_long = encrypt_aes(plaintext, selected_long)
+
+# Run attacks
+dict_found_s, dict_guesses_s, dict_time_s = dictionary_attack(cipher_short, plaintext, short_passwords, decrypt)
+brute_found_s, brute_guesses_s, brute_time_s = brute_force_attack(cipher_short, plaintext, charset, len(selected_short), decrypt)
+
+dict_found_l, dict_guesses_l, dict_time_l = dictionary_attack(cipher_long, plaintext, long_passwords, decrypt)
+brute_found_l, brute_guesses_l, brute_time_l = brute_force_attack(cipher_long, plaintext, charset, len(selected_long), decrypt)
+
+# Plot results
+labels = ["Dict (Short)", "Brute (Short)", "Dict (6-char)", "Brute (6-char)"]
+times = [dict_time_s, brute_time_s, dict_time_l, brute_time_l]
+guesses = [dict_guesses_s, brute_guesses_s, dict_guesses_l, brute_guesses_l]
+
+plt.figure(figsize=(12, 5))
+
+plt.subplot(1, 2, 1)
+plt.bar(labels, times, color=["skyblue", "salmon", "lightgreen", "orange"])
+plt.ylabel("Time (seconds)")
+plt.title("AES: Time to Crack - 4-char vs 6-char Passwords")
+
+plt.subplot(1, 2, 2)
+plt.bar(labels, guesses, color=["skyblue", "salmon", "lightgreen", "orange"])
+plt.ylabel("Number of Guesses")
+plt.title("AES: Guess Count - 4-char vs 6-char Passwords")
+
+plt.tight_layout()
+plt.show()
+
+plaintext = b"Controlled dictionary test"
+charset = "abcdefghijklmnopqrstuvwxyz0123456789"
+key_length = 16  # AES-128
+
+# Encrypt with AES
+cipher_short = encrypt_aes(plaintext, selected_short, key_length)
+cipher_long = encrypt_aes(plaintext, selected_long, key_length)
+
+# Run AES attacks
+dict_found_s, dict_guesses_s, dict_time_s = dictionary_attack(cipher_short, plaintext, short_passwords, decrypt, key_length)
+brute_found_s, brute_guesses_s, brute_time_s = brute_force_attack(cipher_short, plaintext, charset, len(selected_short), decrypt, key_length)
+
+dict_found_l, dict_guesses_l, dict_time_l = dictionary_attack(cipher_long, plaintext, long_passwords, decrypt, key_length)
+brute_found_l, brute_guesses_l, brute_time_l = brute_force_attack(cipher_long, plaintext, charset, len(selected_long), decrypt, key_length)
+
+# Plot unified results
+labels = ["Dict (Short)", "Brute (Short)", "Dict (Long)", "Brute (Long)"]
+times = [dict_time_s, brute_time_s, dict_time_l, brute_time_l]
+guesses = [dict_guesses_s, brute_guesses_s, dict_guesses_l, brute_guesses_l]
+
+plt.figure(figsize=(12, 5))
+
+plt.subplot(1, 2, 1)
+plt.bar(labels, times, color=["skyblue", "salmon", "lightgreen", "orange"])
+plt.ylabel("Time (seconds)")
+plt.title("Time to Crack - AES: Short vs Long Passwords")
+
+plt.subplot(1, 2, 2)
+plt.bar(labels, guesses, color=["skyblue", "salmon", "lightgreen", "orange"])
+plt.ylabel("Number of Guesses")
+plt.title("Guess Count - AES: Short vs Long Passwords")
+
+plt.tight_layout()
+plt.show()
